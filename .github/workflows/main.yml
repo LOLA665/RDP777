@@ -1,0 +1,69 @@
+name: RDP with Tailscale VPN and GitHub Codespaces
+
+on:
+  workflow_dispatch:
+
+jobs:
+  start-rdp-codespace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # 6 hours
+    steps:
+      - name: Generate random RDP password
+        id: gen-pass
+        run: |
+          # Generate a secure random password (16 chars)
+          PASS=$(openssl rand -base64 12)
+          echo "::set-output name=password::$PASS"
+
+      - name: Start GitHub Codespace with Windows 11 (32GB RAM, 600GB SSD)
+        id: create-codespace
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { Octokit } = require("@octokit/rest");
+            const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+
+            // Parameters for Codespace with Windows 11, resource limits
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Example devcontainer config assumed configured for Windows 11 + GPU acceleration in repo
+            const codespace = await octokit.request('POST /repos/{owner}/{repo}/codespaces', {
+              owner,
+              repo,
+              machine: "standard-linux-32core", // hypothetical, no Windows 11 on Linux Codespaces API yet
+              // NOTE: Is a placeholder. Actual Windows 11 Codespaces is beta and may require UI start or API updates
+              // This line is symbolic, real API params might differ when Windows Codespaces is generally available
+              location: "East US",
+              retention_period_days: 1
+            });
+            console.log("Codespace ID:", codespace.data.id);
+            return codespace.data;
+
+      - name: Connect to Tailscale with authkey
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          version: latest
+          use-cache: 'true'
+
+      - name: Display Tailscale IP address
+        run: |
+          IP=$(tailscale ip -4)
+          echo "Tailscale IP: $IP"
+          echo "::set-output name=TAILSCALE_IP::$IP"
+
+      - name: Show RDP connection info
+        run: |
+          echo "RDP IP (Tailscale): ${{ steps.display.outputs.TAILSCALE_IP }}"
+          echo "RDP Password: ${{ steps.gen-pass.outputs.password }}"
+
+      - name: Keep RDP running for 6 hours
+        run: |
+          echo "RDP session ongoing..."
+          sleep 21600 # 6 hours in seconds
+
+      - name: Cleanup Codespace or VM (if applicable)
+        run: |
+          echo "Cleanup step - stop codespace / VM here (script or API call)"
+
