@@ -1,0 +1,55 @@
+name: RDP with Tailscale VPN and Codespace
+
+on:
+  workflow_dispatch:
+
+jobs:
+  start-rdp-codespace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # 6 ore
+    steps:
+      - name: Generate random password
+        id: gen-pass
+        run: |
+          PASS=$(openssl rand -base64 12)
+          echo "password=$PASS" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Codespace
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const response = await github.rest.codespaces.createForAuthenticatedUser({
+              repository_id: context.repo.id,
+              location: "East US",
+              machine: "standard-large" // ajustează după nevoie
+            });
+            console.log("Codespace creat:", response.data);
+            return response.data;
+
+      - name: Install and start Tailscale with auth key
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          version: latest
+          use-cache: 'true'
+
+      - name: Show Tailscale IP
+        id: show-ip
+        run: |
+          IP=$(tailscale ip -4)
+          echo "IP Tailscale: $IP"
+          echo "tailscale_ip=$IP" >> $GITHUB_OUTPUT
+
+      - name: Show RDP info
+        run: |
+          echo "Conexiune RDP:"
+          echo "IP (prin Tailscale): ${{ steps.show-ip.outputs.tailscale_ip }}"
+          echo "Parola RDP: ${{ steps.gen-pass.outputs.password }}"
+
+      - name: Keep alive for 6 hours
+        run: sleep 21600
+
+      - name: Cleanup Codespace (optional)
+        run: echo "Aici poți adăuga scripturi de oprire/eliberare resurse"
+
